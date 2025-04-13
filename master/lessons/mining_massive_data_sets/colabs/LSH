@@ -1,0 +1,667 @@
+{
+  "nbformat": 4,
+  "nbformat_minor": 0,
+  "metadata": {
+    "colab": {
+      "provenance": [],
+      "include_colab_link": true
+    },
+    "kernelspec": {
+      "name": "python3",
+      "display_name": "Python 3"
+    }
+  },
+  "cells": [
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "view-in-github",
+        "colab_type": "text"
+      },
+      "source": [
+        "<a href=\"https://colab.research.google.com/github/hesam2079/education/blob/master/master/lessons/mining_massive_data_sets/colabs/LSH\" target=\"_parent\"><img src=\"https://colab.research.google.com/assets/colab-badge.svg\" alt=\"Open In Colab\"/></a>"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "kPt5q27L5557"
+      },
+      "source": [
+        "# CS246 - Colab 2\n",
+        "## Frequent Pattern Mining in Spark"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from IPython.display import Image\n",
+        "print(\"Colab 2 Mascot\")\n",
+        "Image(url='https://cdn.dribbble.com/users/222579/screenshots/1654898/stubby-ben-rex-roll.gif',width=150)"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/",
+          "height": 55
+        },
+        "id": "kcxD8L9ORHZx",
+        "outputId": "0e7f3487-dddc-4517-f6e2-69991af4137f"
+      },
+      "execution_count": 3,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Colab 2 Mascot\n"
+          ]
+        },
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/html": [
+              "<img src=\"https://cdn.dribbble.com/users/222579/screenshots/1654898/stubby-ben-rex-roll.gif\" width=\"150\"/>"
+            ],
+            "text/plain": [
+              "<IPython.core.display.Image object>"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 3
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "p0-YhEpP_Ds-"
+      },
+      "source": [
+        "### Setup"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "Zsj5WYpR9QId"
+      },
+      "source": [
+        "Let's set up Spark on your Colab environment.  Run the cell below!"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "k-qHai2252mI",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "2b31549b-4cab-4e55-b1ea-1248a7aee470"
+      },
+      "source": [
+        "!pip install pyspark\n",
+        "!pip install -U -q PyDrive2\n",
+        "!apt install openjdk-8-jdk-headless -qq\n",
+        "import os\n",
+        "os.environ[\"JAVA_HOME\"] = \"/usr/lib/jvm/java-8-openjdk-amd64\""
+      ],
+      "execution_count": 4,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Requirement already satisfied: pyspark in /usr/local/lib/python3.11/dist-packages (3.5.5)\n",
+            "Requirement already satisfied: py4j==0.10.9.7 in /usr/local/lib/python3.11/dist-packages (from pyspark) (0.10.9.7)\n",
+            "The following additional packages will be installed:\n",
+            "  libxtst6 openjdk-8-jre-headless\n",
+            "Suggested packages:\n",
+            "  openjdk-8-demo openjdk-8-source libnss-mdns fonts-dejavu-extra fonts-nanum\n",
+            "  fonts-ipafont-gothic fonts-ipafont-mincho fonts-wqy-microhei\n",
+            "  fonts-wqy-zenhei fonts-indic\n",
+            "The following NEW packages will be installed:\n",
+            "  libxtst6 openjdk-8-jdk-headless openjdk-8-jre-headless\n",
+            "0 upgraded, 3 newly installed, 0 to remove and 30 not upgraded.\n",
+            "Need to get 39.7 MB of archives.\n",
+            "After this operation, 144 MB of additional disk space will be used.\n",
+            "Selecting previously unselected package libxtst6:amd64.\n",
+            "(Reading database ... 126315 files and directories currently installed.)\n",
+            "Preparing to unpack .../libxtst6_2%3a1.2.3-1build4_amd64.deb ...\n",
+            "Unpacking libxtst6:amd64 (2:1.2.3-1build4) ...\n",
+            "Selecting previously unselected package openjdk-8-jre-headless:amd64.\n",
+            "Preparing to unpack .../openjdk-8-jre-headless_8u442-b06~us1-0ubuntu1~22.04_amd64.deb ...\n",
+            "Unpacking openjdk-8-jre-headless:amd64 (8u442-b06~us1-0ubuntu1~22.04) ...\n",
+            "Selecting previously unselected package openjdk-8-jdk-headless:amd64.\n",
+            "Preparing to unpack .../openjdk-8-jdk-headless_8u442-b06~us1-0ubuntu1~22.04_amd64.deb ...\n",
+            "Unpacking openjdk-8-jdk-headless:amd64 (8u442-b06~us1-0ubuntu1~22.04) ...\n",
+            "Setting up libxtst6:amd64 (2:1.2.3-1build4) ...\n",
+            "Setting up openjdk-8-jre-headless:amd64 (8u442-b06~us1-0ubuntu1~22.04) ...\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/orbd to provide /usr/bin/orbd (orbd) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/servertool to provide /usr/bin/servertool (servertool) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/jre/bin/tnameserv to provide /usr/bin/tnameserv (tnameserv) in auto mode\n",
+            "Setting up openjdk-8-jdk-headless:amd64 (8u442-b06~us1-0ubuntu1~22.04) ...\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/clhsdb to provide /usr/bin/clhsdb (clhsdb) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/extcheck to provide /usr/bin/extcheck (extcheck) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/hsdb to provide /usr/bin/hsdb (hsdb) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/idlj to provide /usr/bin/idlj (idlj) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/javah to provide /usr/bin/javah (javah) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/jhat to provide /usr/bin/jhat (jhat) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/jsadebugd to provide /usr/bin/jsadebugd (jsadebugd) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/native2ascii to provide /usr/bin/native2ascii (native2ascii) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/schemagen to provide /usr/bin/schemagen (schemagen) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/wsgen to provide /usr/bin/wsgen (wsgen) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/wsimport to provide /usr/bin/wsimport (wsimport) in auto mode\n",
+            "update-alternatives: using /usr/lib/jvm/java-8-openjdk-amd64/bin/xjc to provide /usr/bin/xjc (xjc) in auto mode\n",
+            "Processing triggers for libc-bin (2.35-0ubuntu3.8) ...\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbbbind_2_0.so.3 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbb.so.12 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtcm_debug.so.1 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libur_adapter_opencl.so.0 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libumf.so.0 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libur_adapter_level_zero.so.0 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbbbind.so.3 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbbmalloc_proxy.so.2 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbbbind_2_5.so.3 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libhwloc.so.15 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libur_loader.so.0 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtbbmalloc.so.2 is not a symbolic link\n",
+            "\n",
+            "/sbin/ldconfig.real: /usr/local/lib/libtcm.so.1 is not a symbolic link\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "from google.colab import drive\n",
+        "drive.mount('/content/drive')"
+      ],
+      "metadata": {
+        "id": "anafrcL39KZZ",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "5542a29e-79ca-4e9d-de7e-4d9160a5373a"
+      },
+      "execution_count": 5,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Mounted at /content/drive\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "-CJ71AKe91eh"
+      },
+      "source": [
+        "Now we authenticate a Google Drive client to download the file we will be processing in our Spark job.\n",
+        "\n",
+        "**Make sure to follow the interactive instructions.**"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "5K93ABEy9Zlo"
+      },
+      "source": [
+        "from pydrive2.auth import GoogleAuth\n",
+        "from pydrive2.drive import GoogleDrive\n",
+        "from google.colab import auth\n",
+        "from oauth2client.client import GoogleCredentials\n",
+        "\n",
+        "# Authenticate and create the PyDrive client\n",
+        "auth.authenticate_user()\n",
+        "gauth = GoogleAuth()\n",
+        "gauth.credentials = GoogleCredentials.get_application_default()\n",
+        "drive = GoogleDrive(gauth)"
+      ],
+      "execution_count": 6,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "0orRvrc1-545"
+      },
+      "source": [
+        "id='1dhi1F78ssqR8gE6U-AgB80ZW7V_9snX4'\n",
+        "downloaded = drive.CreateFile({'id': id})\n",
+        "downloaded.GetContentFile('products.csv')\n",
+        "\n",
+        "id='1KZBNEaIyMTcsRV817us6uLZgm-Mii8oU'\n",
+        "downloaded = drive.CreateFile({'id': id})\n",
+        "downloaded.GetContentFile('order_products__train.csv')"
+      ],
+      "execution_count": 7,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "qwtlO4_m_LbQ"
+      },
+      "source": [
+        "If you executed the cells above, you should be able to see the dataset we will need for this Colab under the \"Files\" tab on the left panel."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "twk-K-jilWK7"
+      },
+      "source": [
+        "import pandas as pd\n",
+        "import numpy as np\n",
+        "import matplotlib.pyplot as plt\n",
+        "%matplotlib inline\n",
+        "\n",
+        "import pyspark\n",
+        "from pyspark.sql import *\n",
+        "from pyspark.sql.functions import *\n",
+        "from pyspark import SparkContext, SparkConf"
+      ],
+      "execution_count": 8,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "dr-8fK-1lmY0"
+      },
+      "source": [
+        "Let's initialize the Spark context."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "UOwtm2l7lePt"
+      },
+      "source": [
+        "# create the session\n",
+        "conf = SparkConf().set(\"spark.ui.port\", \"4050\")\n",
+        "\n",
+        "# create the context\n",
+        "sc = pyspark.SparkContext(conf=conf)\n",
+        "spark = SparkSession.builder.getOrCreate()"
+      ],
+      "execution_count": 9,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "CRaF2A_j_nC7"
+      },
+      "source": [
+        "### Your task"
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "ebLNUxP0_8x3"
+      },
+      "source": [
+        "If you run successfully the setup stage, you are ready to work with the **3 Million Instacart Orders** dataset. In case you want to read more about it, check the [official Instacart blog post](https://tech.instacart.com/3-million-instacart-orders-open-sourced-d40d29ead6f2) about it, a concise [schema description](https://gist.github.com/jeremystan/c3b39d947d9b88b3ccff3147dbcf6c6b) of the dataset, and the [download page](https://www.kaggle.com/c/instacart-market-basket-analysis/data).\n",
+        "\n",
+        "In this Colab, we will be working only with a small training dataset (~131K orders) to perform fast Frequent Pattern Mining with the FP-Growth algorithm."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "xu-e7Ph2_ruG"
+      },
+      "source": [
+        "products = spark.read.csv('products.csv', header=True, inferSchema=True)\n",
+        "orders = spark.read.csv('order_products__train.csv', header=True, inferSchema=True)"
+      ],
+      "execution_count": 10,
+      "outputs": []
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "hhxZZRT9syUO",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "851e4c44-3034-454a-f88e-1b231ebd7fa4"
+      },
+      "source": [
+        "products.printSchema()"
+      ],
+      "execution_count": 11,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "root\n",
+            " |-- product_id: integer (nullable = true)\n",
+            " |-- product_name: string (nullable = true)\n",
+            " |-- aisle_id: string (nullable = true)\n",
+            " |-- department_id: string (nullable = true)\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "8VeRYRz2s1pm",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "5a29dd12-2184-4215-8e8d-060d6ed002e0"
+      },
+      "source": [
+        "orders.printSchema()"
+      ],
+      "execution_count": 12,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "root\n",
+            " |-- order_id: integer (nullable = true)\n",
+            " |-- product_id: integer (nullable = true)\n",
+            " |-- add_to_cart_order: integer (nullable = true)\n",
+            " |-- reordered: integer (nullable = true)\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "h5muD_Io59CG"
+      },
+      "source": [
+        "Use the Spark Dataframe API to join 'products' and 'orders', so that you will be able to see the product names in each transaction (and not only their ids).  Then, group by the orders by 'order_id' to obtain one row per basket (i.e., set of products purchased together by one customer)."
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "zRH4o4p7s7V6",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "c0b833b7-851b-493f-c7ec-dda48a7115ed"
+      },
+      "source": [
+        "''' 2 lines of code expected '''\n",
+        "# YOUR CODE HERE\n",
+        "df = orders.join(products, \"product_id\", \"inner\")\n",
+        "df = df.groupBy(\"order_id\").agg(collect_list(\"product_name\").alias(\"items\"))\n",
+        "df.show()"
+      ],
+      "execution_count": 13,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "+--------+--------------------+\n",
+            "|order_id|               items|\n",
+            "+--------+--------------------+\n",
+            "|       1|[Bulgarian Yogurt...|\n",
+            "|      96|[Roasted Turkey, ...|\n",
+            "|     112|[Fresh Cauliflowe...|\n",
+            "|     218|[Natural Artisan ...|\n",
+            "|     456|[Chorizo Pork, Pe...|\n",
+            "|     473|[Organic Whole Mi...|\n",
+            "|     631|[Organic Strawber...|\n",
+            "|     762|[Organic Strawber...|\n",
+            "|     774|[Ice Cream Variet...|\n",
+            "|     844|[Green Beans, Org...|\n",
+            "|     904|[Cup Noodles Chic...|\n",
+            "|     988|[Natural Vanilla ...|\n",
+            "|    1032|[Clover Org Greek...|\n",
+            "|    1077|[Bag of Organic B...|\n",
+            "|    1119|[Boneless Skinles...|\n",
+            "|    1139|[Banana, Organic ...|\n",
+            "|    1143|[Natural Premium ...|\n",
+            "|    1145|[Banana, Original...|\n",
+            "|    1275|[Boneless Skinles...|\n",
+            "|    1280|[Lactose Free Hal...|\n",
+            "+--------+--------------------+\n",
+            "only showing top 20 rows\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "code",
+      "source": [
+        "df.dtypes"
+      ],
+      "metadata": {
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "id": "pN8q7znjpogP",
+        "outputId": "6da63bcc-aa9e-481b-e443-7ab417df1125"
+      },
+      "execution_count": 14,
+      "outputs": [
+        {
+          "output_type": "execute_result",
+          "data": {
+            "text/plain": [
+              "[('order_id', 'int'), ('items', 'array<string>')]"
+            ]
+          },
+          "metadata": {},
+          "execution_count": 14
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "EfHoTLAg6qnM"
+      },
+      "source": [
+        "In this Colab we will explore [MLlib](https://spark.apache.org/mllib/), Apache Spark's scalable machine learning library. Specifically, you can use its implementation of the [FP-Growth](https://spark.apache.org/docs/latest/ml-frequent-pattern-mining.html#fp-growth) algorithm to perform efficiently Frequent Pattern Mining in Spark.\n",
+        "Use the Python example in the documentation, and train a model with\n",
+        "\n",
+        "```minSupport=0.01``` and ```minConfidence=0.5```\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "boWgxXNns089"
+      },
+      "source": [
+        "''' 3 lines of code expected '''\n",
+        "# YOUR CODE HERE\n",
+        "from pyspark.ml.fpm import FPGrowth\n",
+        "fpGrowth = FPGrowth(itemsCol=\"items\", minSupport=0.01, minConfidence=0.5)\n",
+        "model = fpGrowth.fit(df)"
+      ],
+      "execution_count": 18,
+      "outputs": []
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "6kpTVdfD8UiO"
+      },
+      "source": [
+        "Compute how many frequent itemsets and association rules were generated by running FP-growth alongside showing the table of top frequent itemsets and association rules.\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "6KYgQ_URunvA",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "5ba72c0c-ef20-4878-ab30-da99bd390f60"
+      },
+      "source": [
+        "''' 5 lines of code in total expected but can differ based on your style. for sub-parts of the question, creating different cells of code would be recommended.'''\n",
+        "freq_itemsets = model.freqItemsets\n",
+        "num_freq_itemsets = freq_itemsets.count()\n",
+        "print(f\"Number of frequent itemsets: {num_freq_itemsets}\")\n",
+        "\n",
+        "assoc_rules = model.associationRules\n",
+        "num_assoc_rules = assoc_rules.count()\n",
+        "print(f\"Number of association rules: {num_assoc_rules}\")"
+      ],
+      "execution_count": 19,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Number of frequent itemsets: 120\n",
+            "Number of association rules: 0\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "qT8Lwm1VAPoN"
+      },
+      "source": [
+        "Now retrain the FP-growth model changing only\n",
+        "```minsupport=0.001```\n",
+        "and compute how many frequent itemsets and association rules were generated.\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "F4LTM9beApYn",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "0ed65030-a762-4a60-a942-fe997581ad36"
+      },
+      "source": [
+        "''' 5 lines of code in total expected but can differ based on your style. for sub-parts of the question, creating different cells of code would be recommended.'''\n",
+        "fpGrowth = FPGrowth(itemsCol=\"items\", minSupport=0.001, minConfidence=0.5)\n",
+        "model = fpGrowth.fit(df)\n",
+        "\n",
+        "freq_itemsets = model.freqItemsets\n",
+        "num_freq_itemsets = freq_itemsets.count()\n",
+        "print(f\"Number of frequent itemsets: {num_freq_itemsets}\")\n",
+        "\n",
+        "assoc_rules = model.associationRules\n",
+        "num_assoc_rules = assoc_rules.count()\n",
+        "print(f\"Number of association rules: {num_assoc_rules}\")"
+      ],
+      "execution_count": 20,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "Number of frequent itemsets: 4444\n",
+            "Number of association rules: 11\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "k9FOt5jRNFGt"
+      },
+      "source": [
+        "To conclude, go to Gradescope and read the remaining questions. We will ask you to inspect the resulting dataframes, and report a few results.\n",
+        "\n"
+      ]
+    },
+    {
+      "cell_type": "code",
+      "metadata": {
+        "id": "wEqWxzTCNS87",
+        "colab": {
+          "base_uri": "https://localhost:8080/"
+        },
+        "outputId": "6f171b73-9317-45f7-90a7-dfa08893155b"
+      },
+      "source": [
+        "freq_itemsets.orderBy(\"freq\", ascending=False).show(20, truncate=False)"
+      ],
+      "execution_count": 21,
+      "outputs": [
+        {
+          "output_type": "stream",
+          "name": "stdout",
+          "text": [
+            "+------------------------+-----+\n",
+            "|items                   |freq |\n",
+            "+------------------------+-----+\n",
+            "|[Banana]                |18726|\n",
+            "|[Bag of Organic Bananas]|15480|\n",
+            "|[Organic Strawberries]  |10894|\n",
+            "|[Organic Baby Spinach]  |9784 |\n",
+            "|[Large Lemon]           |8135 |\n",
+            "|[Organic Avocado]       |7409 |\n",
+            "|[Organic Hass Avocado]  |7293 |\n",
+            "|[Strawberries]          |6494 |\n",
+            "|[Limes]                 |6033 |\n",
+            "|[Organic Raspberries]   |5546 |\n",
+            "|[Organic Blueberries]   |4966 |\n",
+            "|[Organic Whole Milk]    |4908 |\n",
+            "|[Organic Cucumber]      |4613 |\n",
+            "|[Organic Zucchini]      |4589 |\n",
+            "|[Organic Yellow Onion]  |4290 |\n",
+            "|[Organic Garlic]        |4158 |\n",
+            "|[Seedless Red Grapes]   |4059 |\n",
+            "|[Asparagus]             |3868 |\n",
+            "|[Organic Grape Tomatoes]|3823 |\n",
+            "|[Organic Red Onion]     |3818 |\n",
+            "+------------------------+-----+\n",
+            "only showing top 20 rows\n",
+            "\n"
+          ]
+        }
+      ]
+    },
+    {
+      "cell_type": "markdown",
+      "metadata": {
+        "id": "2WSXPflUN76-"
+      },
+      "source": [
+        "Once you obtained the desired results, **head over to Gradescope and submit your solution for this Colab**! As a sanity check, for `minSupport=0.01` you should obtain `freq([Limes]) = 6033`"
+      ]
+    }
+  ]
+}
